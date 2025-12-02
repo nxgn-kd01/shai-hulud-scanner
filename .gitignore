@@ -1,0 +1,25 @@
+# Scan reports
+shai-hulud-scan-report.txt
+*.txt
+
+# Test directories
+test/
+tmp/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Logs
+*.log
+
+# Environment
+.env
+.env.local

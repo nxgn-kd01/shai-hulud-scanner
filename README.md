@@ -505,8 +505,12 @@ If you get warnings (not critical issues):
 
 ### Community Tools
 
+**Shai Hulud 2.0 Detection:**
 - [Shai-Hulud-2.0-Detector](https://github.com/gensecaihq/Shai-Hulud-2.0-Detector) - GitHub Action with SARIF support
 - [sha1-hulud-scanner](https://github.com/sivanagendravepada/sha1-hulud-scanner) - npm package scanner
+
+**Related Vulnerability Scanners:**
+- [react2shell-scanner](https://github.com/nxgn-kd01/react2shell-scanner) - Detect CVE-2025-55182 (React2Shell) RCE vulnerability in React Server Components
 
 ### Security Best Practices
 

@@ -1,10 +1,13 @@
-# Shai Hulud 2.0 Scanner
+# 🚨 Shai Hulud 2.0 Scanner
 
-🛡️ **Detect indicators of compromise from the Shai Hulud 2.0 npm supply chain attack**
+**796+ npm packages compromised in November 2025. Is your project infected?**
 
-A comprehensive security scanner to detect malicious code and patterns from the Shai Hulud 2.0 worm that compromised 796+ npm packages in November 2025.
+Fast, comprehensive scanner to detect the fastest-spreading npm supply chain attack ever observed. Scans for malicious files, stolen credentials, and automated worm propagation patterns.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![GitHub Issues](https://img.shields.io/github/issues/nxgn-kd01/shai-hulud-scanner)](https://github.com/nxgn-kd01/shai-hulud-scanner/issues)
+[![GitHub Stars](https://img.shields.io/github/stars/nxgn-kd01/shai-hulud-scanner?style=social)](https://github.com/nxgn-kd01/shai-hulud-scanner/stargazers)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/nxgn-kd01/shai-hulud-scanner/blob/main/CONTRIBUTING.md)
 
 ## 🚨 About Shai Hulud 2.0
 
@@ -18,6 +21,21 @@ Shai Hulud 2.0 is one of the fastest-spreading npm supply chain attacks ever obs
 
 **Timeline:** Active November 2025
 **Vector:** Stolen npm credentials → automated package hijacking → credential harvesting loop
+
+## ⚡ Quick Start (30 seconds)
+
+```bash
+# Download and run (no installation required)
+curl -sSL https://raw.githubusercontent.com/nxgn-kd01/shai-hulud-scanner/main/scan.sh | bash -s /path/to/your/project
+
+# Or clone and run
+git clone https://github.com/nxgn-kd01/shai-hulud-scanner.git
+cd shai-hulud-scanner
+chmod +x scan.sh
+./scan.sh /path/to/your/project
+```
+
+**Results in seconds:** 🚨 Critical findings | ⚠️ Warnings | ✅ All clear
 
 ## 📋 What This Scanner Checks
 

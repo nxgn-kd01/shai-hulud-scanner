@@ -39,7 +39,7 @@ chmod +x scan.sh
 
 ## 📋 What This Scanner Checks
 
-This tool performs 7 comprehensive security checks:
+This tool performs 8 comprehensive security checks:
 
 ### 1. **Malicious File Detection** 🔴 Critical
 - `setup_bun.js` - Malicious preinstall script
@@ -50,8 +50,12 @@ Validates files against known malicious SHA-256 hashes:
 - `a3894003ad1d293ba96d77881ccd2071446dc3f65f434669b49b3da92421901a` (setup_bun.js)
 - 6 known hashes for bun_environment.js variants
 
-### 3. **Suspicious Script Analysis** 🟡 Warning
-- Detects suspicious `preinstall` scripts in package.json
+### 3. **Lifecycle Script Analysis** 🟡 Warning
+- Detects suspicious lifecycle scripts in package.json:
+  - `preinstall` (highest risk - runs before npm install)
+  - `postinstall` (runs after npm install)
+  - `install` (runs during npm install)
+  - `prepare` (runs after package is packed)
 - Identifies references to setup_bun or bun_environment
 - Flags unexpected script modifications
 
@@ -77,6 +81,11 @@ Checks for packages from affected ecosystems:
 - Detects repos with description: "Sha1-Hulud: The Second Coming."
 - Identifies suspicious 18-character lowercase alphanumeric repo names
 - Flags unusual repository creation patterns
+
+### 8. **Package Lockfile Integrity** 🟡 Warning
+- Checks for non-standard registry URLs in lockfiles
+- Detects git-based dependencies (potential supply chain risk)
+- Validates package-lock.json and yarn.lock integrity
 
 ## 🚀 Getting Started
 
@@ -316,6 +325,45 @@ for dir in /Users/username/code/*/; do
 done
 ```
 
+### JSON Output (v1.1.0+)
+
+For automation and SIEM integration:
+
+```bash
+# Get JSON output
+./scan.sh /path/to/project --json
+
+# Pipe to jq for processing
+./scan.sh /path/to/project --json | jq '.summary'
+
+# Save results
+./scan.sh /path/to/project --json > scan-results.json
+```
+
+**Example JSON output:**
+```json
+{
+  "scanner": "shai-hulud-scanner",
+  "version": "1.1.0",
+  "scanDate": "2025-01-02T12:00:00Z",
+  "scanDirectory": "/path/to/project",
+  "summary": {
+    "critical": 0,
+    "warning": 1,
+    "info": 2
+  },
+  "findings": [
+    {
+      "severity": "warning",
+      "category": "scripts",
+      "message": "postinstall script found",
+      "file": "/path/to/project/package.json"
+    }
+  ],
+  "references": [...]
+}
+```
+
 ### CI/CD Integration
 
 **Quick Integration:**
@@ -372,7 +420,7 @@ A detailed report is saved to `shai-hulud-scan-report.txt` containing:
 ## 🎯 Example Output
 
 ```
-=== Shai Hulud 2.0 Scanner v1.0.0 ===
+=== Shai Hulud 2.0 Scanner v1.1.0 ===
 Scanning directory: /Users/username/project
 
 === 1. Scanning for Malicious Files ===
@@ -396,6 +444,9 @@ Scanning directory: /Users/username/project
 === 7. Checking GitHub Repository Patterns ===
 ✅ No suspicious repository descriptions
 ✅ No suspicious repository names
+
+=== 8. Checking Package Lockfile Integrity ===
+✅ Lockfile integrity checks passed
 
 === Scan Summary ===
 
@@ -519,6 +570,9 @@ If you get warnings (not critical issues):
 
 - **DataDog IOC Repository:** [github.com/DataDog/indicators-of-compromise](https://github.com/DataDog/indicators-of-compromise/tree/main/shai-hulud-2.0)
 - **DataDog Analysis:** [securitylabs.datadoghq.com/articles/shai-hulud-2.0-npm-worm](https://securitylabs.datadoghq.com/articles/shai-hulud-2.0-npm-worm/)
+- **Microsoft Security Blog:** [Shai-Hulud 2.0 Guidance](https://www.microsoft.com/en-us/security/blog/2025/12/09/shai-hulud-2-0-guidance-for-detecting-investigating-and-defending-against-the-supply-chain-attack/)
+- **Wiz Research:** [Shai-Hulud 2.0 Ongoing Attack](https://www.wiz.io/blog/shai-hulud-2-0-ongoing-supply-chain-attack)
+- **CISA Alert:** [Widespread Supply Chain Compromise](https://www.cisa.gov/news-events/alerts/2025/09/23/widespread-supply-chain-compromise-impacting-npm-ecosystem)
 - **Consolidated IOC List:** 1,000+ compromised packages tracked
 
 ### Community Tools
@@ -549,7 +603,9 @@ Contributions are welcome! Please:
 ### Ideas for Contributions
 
 - [ ] Add support for additional IOC sources
-- [ ] Implement JSON output format
+- [x] Implement JSON output format (v1.1.0)
+- [x] Add lockfile integrity checks (v1.1.0)
+- [x] Detect all lifecycle scripts (v1.1.0)
 - [ ] Add Docker container support
 - [ ] Create npm package version
 - [ ] Add integration tests

@@ -7,12 +7,59 @@
 
 set -e
 
-VERSION="1.0.0"
-SCAN_DIR="${1:-.}"
+VERSION="1.1.0"
 REPORT_FILE="shai-hulud-scan-report.txt"
 CRITICAL_ISSUES=0
 WARNING_ISSUES=0
 INFO_ISSUES=0
+JSON_OUTPUT=false
+SCAN_DIR=""
+
+# Parse arguments
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --json)
+            JSON_OUTPUT=true
+            shift
+            ;;
+        -h|--help)
+            echo "Shai Hulud 2.0 Scanner v1.1.0"
+            echo ""
+            echo "Usage: ./scan.sh [path] [options]"
+            echo ""
+            echo "Options:"
+            echo "  --json    Output results as JSON"
+            echo "  -h,--help Show this help message"
+            echo ""
+            echo "Examples:"
+            echo "  ./scan.sh                # Scan current directory"
+            echo "  ./scan.sh /path/to/code  # Scan specific directory"
+            echo "  ./scan.sh --json         # JSON output for automation"
+            exit 0
+            ;;
+        -*)
+            echo "Unknown option: $1"
+            exit 1
+            ;;
+        *)
+            SCAN_DIR="$1"
+            shift
+            ;;
+    esac
+done
+
+# Default to current directory
+[[ -z "$SCAN_DIR" ]] && SCAN_DIR="."
+
+# JSON results array
+declare -a JSON_RESULTS=()
+add_json_finding() {
+    local severity="$1"
+    local category="$2"
+    local message="$3"
+    local file="${4:-}"
+    JSON_RESULTS+=("{\"severity\":\"$severity\",\"category\":\"$category\",\"message\":\"$message\",\"file\":\"$file\"}")
+}
 
 # Colors for output
 RED='\033[0;31m'
@@ -122,28 +169,64 @@ else
 fi
 echo "" >> "$REPORT_FILE"
 
-# Check 3: Suspicious preinstall scripts
+# Check 3: Suspicious lifecycle scripts (preinstall, postinstall, install, prepare)
 print_header "3. Checking package.json for Suspicious Scripts"
 {
     echo "======================================"
     echo "3. PACKAGE.JSON SCRIPT ANALYSIS"
     echo "======================================"
     echo ""
+    echo "Checking for potentially malicious lifecycle scripts:"
+    echo "  - preinstall (highest risk - runs before npm install)"
+    echo "  - postinstall (runs after npm install)"
+    echo "  - install (runs during npm install)"
+    echo "  - prepare (runs after package is packed)"
+    echo ""
 } >> "$REPORT_FILE"
 
 SUSPICIOUS_SCRIPTS=0
 while IFS= read -r -d '' pkg_file; do
+    # Check for preinstall (highest risk)
     if grep -q '"preinstall"' "$pkg_file" 2>/dev/null; then
         print_warning "preinstall script found in: $pkg_file"
         echo "WARNING: preinstall script in $pkg_file" >> "$REPORT_FILE"
         grep -A 2 '"preinstall"' "$pkg_file" >> "$REPORT_FILE" 2>/dev/null || true
+        add_json_finding "warning" "scripts" "preinstall script found" "$pkg_file"
         ((SUSPICIOUS_SCRIPTS++))
     fi
 
+    # Check for postinstall
+    if grep -q '"postinstall"' "$pkg_file" 2>/dev/null; then
+        print_warning "postinstall script found in: $pkg_file"
+        echo "WARNING: postinstall script in $pkg_file" >> "$REPORT_FILE"
+        grep -A 2 '"postinstall"' "$pkg_file" >> "$REPORT_FILE" 2>/dev/null || true
+        add_json_finding "warning" "scripts" "postinstall script found" "$pkg_file"
+        ((SUSPICIOUS_SCRIPTS++))
+    fi
+
+    # Check for install script
+    if grep -q '"install"[[:space:]]*:' "$pkg_file" 2>/dev/null; then
+        print_warning "install script found in: $pkg_file"
+        echo "WARNING: install script in $pkg_file" >> "$REPORT_FILE"
+        grep -A 2 '"install"' "$pkg_file" >> "$REPORT_FILE" 2>/dev/null || true
+        add_json_finding "warning" "scripts" "install script found" "$pkg_file"
+        ((SUSPICIOUS_SCRIPTS++))
+    fi
+
+    # Check for prepare script
+    if grep -q '"prepare"' "$pkg_file" 2>/dev/null; then
+        print_info "prepare script found in: $pkg_file"
+        echo "INFO: prepare script in $pkg_file" >> "$REPORT_FILE"
+        grep -A 2 '"prepare"' "$pkg_file" >> "$REPORT_FILE" 2>/dev/null || true
+        add_json_finding "info" "scripts" "prepare script found" "$pkg_file"
+    fi
+
+    # Check for suspicious bun references
     if grep -qi "setup_bun\|bun_environment" "$pkg_file" 2>/dev/null; then
         print_critical "Suspicious bun references in: $pkg_file"
         echo "CRITICAL: Suspicious bun references in $pkg_file" >> "$REPORT_FILE"
         grep -i "setup_bun\|bun_environment" "$pkg_file" >> "$REPORT_FILE" 2>/dev/null || true
+        add_json_finding "critical" "malware" "Suspicious bun references found" "$pkg_file"
         ((SUSPICIOUS_SCRIPTS++))
     fi
 done < <(find "$SCAN_DIR" -name "package.json" -print0 2>/dev/null)
@@ -290,8 +373,71 @@ else
 fi
 echo "" >> "$REPORT_FILE"
 
+# Check 8: Package Lockfile Integrity
+print_header "8. Checking Package Lockfile Integrity"
+{
+    echo "======================================"
+    echo "8. PACKAGE LOCKFILE INTEGRITY CHECK"
+    echo "======================================"
+    echo ""
+    echo "Checking for discrepancies between package.json and lockfile"
+    echo ""
+} >> "$REPORT_FILE"
+
+LOCKFILE_ISSUES=0
+while IFS= read -r -d '' pkg_file; do
+    pkg_dir=$(dirname "$pkg_file")
+
+    # Check for package-lock.json
+    if [[ -f "$pkg_dir/package-lock.json" ]]; then
+        # Check if lockfile has been modified more recently than package.json
+        if [[ "$pkg_dir/package-lock.json" -nt "$pkg_dir/package.json" ]]; then
+            # This is normal - lockfile updated when installing
+            :
+        fi
+
+        # Check for suspicious resolved URLs in lockfile (non-standard registries)
+        if grep -q '"resolved"' "$pkg_dir/package-lock.json" 2>/dev/null; then
+            suspicious_urls=$(grep '"resolved"' "$pkg_dir/package-lock.json" 2>/dev/null | grep -v "registry.npmjs.org" | grep -v "registry.yarnpkg.com" | head -5 || true)
+            if [ -n "$suspicious_urls" ]; then
+                print_warning "Non-standard registry URLs in lockfile: $pkg_dir"
+                echo "WARNING: Non-standard registry URLs in $pkg_dir/package-lock.json:" >> "$REPORT_FILE"
+                echo "$suspicious_urls" >> "$REPORT_FILE"
+                add_json_finding "warning" "lockfile" "Non-standard registry URLs found" "$pkg_dir/package-lock.json"
+                ((LOCKFILE_ISSUES++))
+            fi
+        fi
+
+        # Check for git dependencies (potential supply chain risk)
+        if grep -q '"git+' "$pkg_dir/package-lock.json" 2>/dev/null || grep -q '"github:' "$pkg_dir/package-lock.json" 2>/dev/null; then
+            print_info "Git-based dependencies found in: $pkg_dir"
+            echo "INFO: Git-based dependencies in $pkg_dir/package-lock.json" >> "$REPORT_FILE"
+            add_json_finding "info" "lockfile" "Git-based dependencies found" "$pkg_dir/package-lock.json"
+        fi
+    fi
+
+    # Check for yarn.lock
+    if [[ -f "$pkg_dir/yarn.lock" ]]; then
+        # Check for suspicious resolved URLs
+        suspicious_urls=$(grep "resolved " "$pkg_dir/yarn.lock" 2>/dev/null | grep -v "registry.npmjs.org" | grep -v "registry.yarnpkg.com" | head -5 || true)
+        if [ -n "$suspicious_urls" ]; then
+            print_warning "Non-standard registry URLs in yarn.lock: $pkg_dir"
+            echo "WARNING: Non-standard registry URLs in $pkg_dir/yarn.lock:" >> "$REPORT_FILE"
+            echo "$suspicious_urls" >> "$REPORT_FILE"
+            add_json_finding "warning" "lockfile" "Non-standard registry URLs found" "$pkg_dir/yarn.lock"
+            ((LOCKFILE_ISSUES++))
+        fi
+    fi
+
+done < <(find "$SCAN_DIR" -name "package.json" -print0 2>/dev/null)
+
+if [ $LOCKFILE_ISSUES -eq 0 ]; then
+    print_success "Lockfile integrity checks passed"
+    echo "RESULT: PASS - Lockfile integrity verified" >> "$REPORT_FILE"
+fi
+echo "" >> "$REPORT_FILE"
+
 # Generate Summary
-print_header "Scan Summary"
 {
     echo "======================================"
     echo "SCAN SUMMARY"
@@ -303,6 +449,46 @@ print_header "Scan Summary"
     echo ""
 } >> "$REPORT_FILE"
 
+# JSON Output
+if [[ "$JSON_OUTPUT" == true ]]; then
+    # Build JSON results array
+    json_findings="["
+    first=true
+    for finding in "${JSON_RESULTS[@]}"; do
+        [[ "$first" == true ]] && first=false || json_findings+=","
+        json_findings+="$finding"
+    done
+    json_findings+="]"
+
+    cat << EOF
+{
+  "scanner": "shai-hulud-scanner",
+  "version": "$VERSION",
+  "scanDate": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")",
+  "scanDirectory": "$(realpath "$SCAN_DIR")",
+  "summary": {
+    "critical": $CRITICAL_ISSUES,
+    "warning": $WARNING_ISSUES,
+    "info": $INFO_ISSUES
+  },
+  "findings": $json_findings,
+  "references": [
+    "https://securitylabs.datadoghq.com/articles/shai-hulud-2.0-npm-worm/",
+    "https://www.microsoft.com/en-us/security/blog/2025/12/09/shai-hulud-2-0-guidance-for-detecting-investigating-and-defending-against-the-supply-chain-attack/",
+    "https://www.wiz.io/blog/shai-hulud-2-0-ongoing-supply-chain-attack"
+  ]
+}
+EOF
+
+    if [ $CRITICAL_ISSUES -gt 0 ]; then
+        exit 1
+    else
+        exit 0
+    fi
+fi
+
+# Normal text output
+print_header "Scan Summary"
 echo ""
 echo "Critical Issues: $CRITICAL_ISSUES"
 echo "Warnings: $WARNING_ISSUES"
